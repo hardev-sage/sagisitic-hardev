@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>sagisitic-hardev // privacy-first dev network</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+    <!-- Auth Modal -->
+    <div id="auth-screen" class="auth-overlay">
+        <div class="auth-card">
+            <div class="brand-header">
+                <span class="terminal-prompt">&gt;_</span>
+                <h1>sagisitic-hardev</h1>
+            </div>
+            <p class="auth-subtitle">Zero tracking. E2EE Chat. Strictly Engineering &amp; CyberSec.</p>
+            <form id="auth-form">
+                <div class="field">
+                    <label for="username-input">Handle (Username)</label>
+                    <input type="text" id="username-input" placeholder="e.g. hardev_sage" required pattern="[a-zA-Z0-9_]{3,20}">
+                </div>
+                <div class="field">
+                    <label for="email-input">Email (Verification only, never public)</label>
+                    <input type="email" id="email-input" placeholder="sage@localhost.dev" required>
+                </div>
+                <div class="field">
+                    <label for="passphrase-input">Local E2EE Key Passphrase</label>
+                    <input type="password" id="passphrase-input" placeholder="Generates your AES-256 session key" required minlength="6">
+                </div>
+                <button type="submit" class="btn-primary full-width">Initialize Session</button>
+            </form>
+            <div class="privacy-note">
+                No phone number required. Keys are derived locally via WebCrypto API.
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Layout -->
+    <div id="app-container" class="app-layout hidden">
+        <!-- Top Navigation -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <span class="logo-text">&gt;_ sagisitic-hardev</span>
+                <div class="mode-switch">
+                    <button id="mode-chat-btn" class="mode-btn active">Chat</button>
+                    <button id="mode-feed-btn" class="mode-btn">Tech Feed</button>
+                </div>
+            </div>
+            <div class="topbar-right">
+                <span id="backend-status" class="status-pill" title="Switches automatically between local Rust/Python servers and static GitHub Pages mode">
+                    E2EE: ACTIVE
+                </span>
+                <span id="current-user-badge" class="user-badge">@guest</span>
+                <button id="logout-btn" class="btn-ghost" title="Clear session">Exit</button>
+            </div>
+        </header>
+
+        <!-- CHAT VIEW -->
+        <main id="chat-view" class="workspace">
+            <!-- Channels & DMs Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <div class="section-header">
+                        <span>DIRECT (1-to-1 E2EE)</span>
+                        <button id="new-dm-btn" class="icon-btn" title="Start DM">+</button>
+                    </div>
+                    <ul id="dm-list" class="channel-list"></ul>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="section-header">
+                        <span>GROUPS</span>
+                        <button id="new-group-btn" class="icon-btn" title="Create Group">+</button>
+                    </div>
+                    <ul id="group-list" class="channel-list"></ul>
+                </div>
+
+                <div class="sidebar-footer">
+                    <div class="crypto-info">
+                        <span class="dot-online"></span>
+                        <span id="key-fingerprint">AES-GCM-256</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Active Chat Area -->
+            <section class="chat-main">
+                <div class="chat-header">
+                    <div>
+                        <h2 id="active-channel-title">#rust-systems</h2>
+                        <span id="active-channel-meta" class="channel-meta">End-to-end encrypted channel</span>
+                    </div>
+                    <div class="chat-header-actions">
+                        <button id="toggle-pins-btn" class="btn-secondary">
+                            📌 Pinned (<span id="pin-count">0</span>)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pinned Messages Drawer -->
+                <div id="pinned-drawer" class="pinned-drawer hidden">
+                    <div class="pinned-drawer-header">
+                        <span>Pinned in this channel</span>
+                        <button id="close-pins-btn" class="icon-btn">&times;</button>
+                    </div>
+                    <div id="pinned-list" class="pinned-items"></div>
+                </div>
+
+                <!-- Message Stream -->
+                <div id="message-stream" class="message-stream"></div>
+
+                <!-- Reply Banner -->
+                <div id="reply-banner" class="reply-banner hidden">
+                    <span id="reply-preview-text">Replying to...</span>
+                    <button id="cancel-reply-btn" class="icon-btn">&times;</button>
+                </div>
+
+                <!-- Chat Input Bar -->
+                <div class="chat-composer">
+                    <div class="composer-toolbar">
+                        <button id="insert-code-btn" class="tool-btn" title="Insert Code Block">{ } Code</button>
+                        <label class="tool-btn" title="Share Image/Meme (EXIF stripped automatically)">
+                            🖼️ Image/Meme
+                            <input type="file" id="image-upload-input" accept="image/*" hidden>
+                        </label>
+                        <label class="tool-btn" title="Attach File">
+                            📎 File
+                            <input type="file" id="file-upload-input" hidden>
+                        </label>
+                        <button id="voice-record-btn" class="tool-btn" title="Record Voice Note">🎙️ Voice</button>
+                    </div>
+
+                    <!-- Expandable Code Snippet Box -->
+                    <div id="code-composer-box" class="code-composer hidden">
+                        <div class="code-composer-top">
+                            <select id="code-lang-select">
+                                <option value="rust">Rust</option>
+                                <option value="python">Python</option>
+                                <option value="javascript">JavaScript</option>
+                                <option value="c">C / C++</option>
+                                <option value="bash">Bash / Shell</option>
+                                <option value="sql">SQL</option>
+                            </select>
+                            <button type="button" id="close-code-box" class="icon-btn">&times;</button>
+                        </div>
+                        <textarea id="code-snippet-input" placeholder="Paste or write code here..."></textarea>
+                    </div>
+
+                    <form id="chat-form" class="composer-input-row">
+                        <textarea id="chat-input" rows="1" placeholder="Write an encrypted message... (Tip: use ```lang for inline code)"></textarea>
+                        <button type="submit" class="btn-primary">Send</button>
+                    </form>
+                </div>
+            </section>
+        </main>
+
+        <!-- FEED VIEW (4 Pillars Only) -->
+        <main id="feed-view" class="feed-workspace hidden">
+            <aside class="feed-sidebar">
+                <h3>Strict Categories</h3>
+                <p class="muted-text">No reels. No fluff. Only engineering &amp; security.</p>
+                <div class="pillar-filters">
+                    <button class="pillar-btn active" data-filter="all">All Signal</button>
+                    <button class="pillar-btn" data-filter="builds">🛠️ Builds</button>
+                    <button class="pillar-btn" data-filter="bugs">🐛 Bugs / Help</button>
+                    <button class="pillar-btn" data-filter="cybersec">🛡️ CyberSec News</button>
+                    <button class="pillar-btn" data-filter="memes">💀 Dev Memes</button>
+                </div>
+
+                <div class="rules-box">
+                    <h4>Protocol Rules</h4>
+                    <ul>
+                        <li>Strip EXIF data on uploads (Automated)</li>
+                        <li>Bugs must include code or error logs</li>
+                        <li>Builds require a repo or demo link</li>
+                        <li>Use Anonymous mode for sensitive doubts</li>
+                    </ul>
+                </div>
+            </aside>
+
+            <section class="feed-main">
+                <!-- Create Post Card -->
+                <div class="post-composer-card">
+                    <form id="feed-post-form">
+                        <div class="post-form-header">
+                            <select id="post-category" required>
+                                <option value="builds">🛠️ Builds (Show what you shipped)</option>
+                                <option value="bugs">🐛 Bugs / Help (Debug together)</option>
+                                <option value="cybersec">🛡️ CyberSec News (CVEs, CTFs, Tools)</option>
+                                <option value="memes">💀 Memes (Strictly Eng/Sec)</option>
+                            </select>
+
+                            <label class="anon-toggle" title="Hides your username on the feed">
+                                <input type="checkbox" id="post-anon-checkbox">
+                                <span>Post as @Ghost_Engineer</span>
+                            </label>
+                        </div>
+
+                        <input type="text" id="post-title" placeholder="Title (e.g. Built a port scanner in Rust)" required>
+
+                        <!-- Dynamic field for Builds / CyberSec -->
+                        <input type="url" id="post-link" placeholder="GitHub Repo / Demo / CVE Reference URL (optional)">
+
+                        <textarea id="post-body" rows="3" placeholder="Explain the architecture, bug context, or finding..." required></textarea>
+
+                        <!-- Code block for feed -->
+                        <div class="feed-code-input-wrap">
+                            <textarea id="post-code" rows="3" placeholder="Optional: Paste code snippet or terminal traceback..."></textarea>
+                        </div>
+
+                        <div class="post-form-footer">
+                            <label class="tool-btn">
+                                🖼️ Attach Image / Meme (EXIF Stripped)
+                                <input type="file" id="post-image-input" accept="image/*" hidden>
+                            </label>
+                            <span id="post-image-name" class="muted-text"></span>
+                            <button type="submit" class="btn-primary">Publish to Feed</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Feed Stream -->
+                <div id="feed-stream" class="feed-stream"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
