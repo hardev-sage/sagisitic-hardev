@@ -1,1 +1,8 @@
+```toml
+[package]
+name = "sagisitic_chat_relay"
+version = "0.1.0"
+edition = "2021"
 
+[dependencies]
+```
